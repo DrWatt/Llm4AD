@@ -85,16 +85,18 @@ tokenizer = transformers.BertTokenizer("bpe_vocab_custom.txt")
 #        vocab_file.write(f"{token}\n")
 
 
-with open("reddit_summary.txt", "r", encoding="utf-8") as file:
+with open("reddit_content.txt", "r", encoding="utf-8") as file:
     lines = file.readlines()
 # Strip the newline characters if you don't want them
 content_list = [line.strip() for line in lines]
-print(content_list[:3])
+max_s = 512 # max([len(s) for s in content_list])
+print(max_s)
+print(content_list[2])
 encoded_input = tokenizer(
         content_list[:10], 
     padding="max_length",
     truncation=True,
-    max_length=512,
+    max_length=max_s,
     return_tensors="tf",  # "pt" for PyTorch
     return_attention_mask=True,
     return_token_type_ids=True
@@ -369,7 +371,7 @@ class LogEncoder(tf_keras.Model):
 
 
 
-        decoder_out = [output_word_ids,output_type_ids]
+        decoder_out = output_word_ids
 
 
 #        else:
@@ -383,7 +385,7 @@ class LogEncoder(tf_keras.Model):
       # can assign attributes to `self` - note that all `self` assignments are
       # below this line.
         super().__init__(
-            inputs=[word_ids, mask, type_ids], outputs=decoder_out, **kwargs)
+            inputs=(word_ids, mask, type_ids), outputs=decoder_out, **kwargs)
         config_dict = {
             'vocab_size': vocab_size,
             'embedding_width': embedding_width,
@@ -421,27 +423,58 @@ class LogEncoder(tf_keras.Model):
 
 #albert = tfm.nlp.networks.AlbertEncoder(100)
 #albert.summary()
-model = LogEncoder(vocab_size=8000)
+model = LogEncoder(vocab_size=8128, max_sequence_length = max_s) # per ora messo manualmente da 8000 che dovrebbe essere, inserire modo automatico per misurare il vocabolario
 model.summary()
 
 ############ DEFINE LOSS resolve problem with sliding of the loss instead of all 512 outputs at once
 
 def reco_loss(y_true, y_pred):
     # Categorical Crossentropy for the first output
-    loss_id = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)(y_true[0], y_pred[0])
-    
+    loss_id = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)(y_true, y_pred)
+    #assert tf.reduce_all((y_true >= 0) & (y_true < 8000))
     # Categorical Crossentropy for the second output
-    loss_type = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)(y_true[1], y_pred[1])
+    #loss_type = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False)(y_true[1], y_pred[1])
     
     # Combine the losses (e.g., sum or average)
-    total_loss = loss_id + loss_type  # You can use any other combination such as (loss_1 + loss_2) / 2
+    total_loss = loss_id #+ loss_type  # You can use any other combination such as (loss_1 + loss_2) / 2
     
     return total_loss
 
-model.compile(optimizer = tf_keras.optimizers.Adam(learning_rate=3E-3),loss=reco_loss)
-model.fit([input_ids,attention_mask,token_type_ids],[input_ids,token_type_ids], epochs=1, batch_size=1)
+model.compile(optimizer = tf_keras.optimizers.Adam(learning_rate=3E-3,clipnorm=1.0),loss=reco_loss)
+model.fit(x = (input_ids,attention_mask,token_type_ids),y = input_ids, epochs=1, batch_size=1)
 
+encoded_input = tokenizer(
+        content_list[705:707],
+    padding="max_length",
+    truncation=True,
+    max_length=max_s,
+    return_tensors="tf",  # "pt" for PyTorch
+    return_attention_mask=True,
+    return_token_type_ids=True
+)
 
+input_ids = encoded_input["input_ids"]
+attention_mask = encoded_input["attention_mask"]
+token_type_ids = encoded_input["token_type_ids"]
+
+print(content_list[705])
+test_out = model.predict((input_ids, attention_mask,token_type_ids))
+max_out= np.max(test_out[0],axis=1)
+tok_idxs = []
+for i in test_out[0]:
+    print(len(i),i)
+    tok_idxs.append(np.argmax(i))
+    print(np.argsort(i)[-2])
+    print(np.sort(i)[::-1])
+print(tok_idxs)
+cat_out = np.argsort(test_out[0],axis=0)[-2]
+print(test_out.shape)
+print(test_out[0].shape)
+print(test_out[0][0].shape)
+print(max_out.shape)
+print(cat_out.shape)
+print(cat_out)
+print(tokenizer.decode(tok_idxs,skip_special_tokens=True))
 
 
 class CustomTokenizer(tf.Module):
