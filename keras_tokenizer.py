@@ -12,7 +12,7 @@ import random
 def tokenize_input(input_file: str, vocab_size: int, sequence_length: int, batch_size: int):
     with open(input_file, "r", encoding="utf-8") as file:
         lines = file.readlines()
-
+    print(len(lines))
     content_list = [line.strip() for line in lines]
     # for _ in range(5):
     #     print(random.choice(content_list))

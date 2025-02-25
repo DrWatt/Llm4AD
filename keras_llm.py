@@ -1,11 +1,18 @@
 import os
-os.environ["KERAS_BACKEND"] = "tensorflow"
 import tensorflow as tf
 import keras
 import numpy as np
+import json
+import collections
+from tensorflow_text.tools.wordpiece_vocab import bert_vocab_from_dataset as bert_vocab
+import tokenizers
+import transformers
+from tokenizers.normalizers import NFKC
+import pandas as pd
 
 from keras_tokenizer import tokenize_input
 
+os.environ["KERAS_BACKEND"] = "tensorflow"
 
 class TransformerEncoder(keras.layers.Layer):
     def __init__(self, embed_dim, dense_dim, num_heads, **kwargs):
@@ -141,8 +148,8 @@ def make_dataset(texts):
 
 
 
-vocab_size = 5000
-sequence_length = 60
+vocab_size = 8000
+sequence_length = 100
 
 embed_dim = 256
 dense_dim = 64
@@ -177,9 +184,9 @@ model = keras.Model(
 #model = keras.models.Model(inp,x)
 model.summary()
 
-trainset, valset, testset = tokenize_input("reddit_summary.txt",vocab_size, sequence_length, batch_size)
+trainset, valset, testset = tokenize_input("reddit_content.txt",vocab_size, sequence_length, batch_size)
 
-epochs = 1  # This should be at least 30 for convergence
+epochs = 3  # This should be at least 30 for convergence
 
 model.compile(
     "rmsprop",
@@ -187,13 +194,13 @@ model.compile(
     metrics=["accuracy"],
 )
 for inputs, targets in trainset.take(1):
-    print(f'inputs["encoder_inputs"].shape: {inputs["encoder_inputs"]}')
-    print(f'inputs["decoder_inputs"].shape: {inputs["decoder_inputs"]}')
-    print(f"targets.shape: {targets}")
+    print(f'inputs["encoder_inputs"].shape: {inputs["encoder_inputs"].shape}')
+    print(f'inputs["decoder_inputs"].shape: {inputs["decoder_inputs"].shape}')
+    print(f"targets.shape: {targets.shape}")
 
 model.fit(trainset, epochs=epochs, validation_data = valset)
 
-
+model.save("reddit_model.keras")
 
 
 
